@@ -2,8 +2,7 @@ import datetime
 import unittest
 from collections import namedtuple
 
-import pytest
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import patch
 
 import servicex_storage.minio_storage_manager
 

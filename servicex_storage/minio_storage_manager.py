@@ -1,8 +1,13 @@
+"""
+Implementation of storage manager for minio based storage
+"""
+
 import datetime
+import logging
 import os
 import pathlib
 import concurrent.futures
-import sys
+import typing
 from collections import namedtuple
 
 import minio
@@ -18,11 +23,18 @@ class MinioStore(object_storage_manager.ObjectStore):
   """
   def __init__(self, minio_url: str, access_key: str, secret_key: str):
     super().__init__()
+
+    self.logger = logging.getLogger(__name__)
+    self.logger.addHandler(logging.NullHandler())
+
     self.minio_url = minio_url
     self.access_key = access_key
     self.secret_key = secret_key
-    # client is thread safe using Threading, not so much with multiprocessing
-    self.__minio_client = minio.Minio(self.minio_url, access_key=self.access_key, secret_key=self.secret_key)
+
+    # minio client is thread safe using Threading, not so much with multiprocessing
+    self.__minio_client = minio.Minio(self.minio_url,
+                                      access_key=self.access_key,
+                                      secret_key=self.secret_key)
 
   def get_bucket_info(self, bucket: str) -> BucketInfo:
     """
@@ -35,7 +47,6 @@ class MinioStore(object_storage_manager.ObjectStore):
     objects = self.__minio_client.list_objects(bucket)
     size = 0
     last_modified = datetime.datetime.now()
-    print(bucket)
     for obj in objects:
       result = self.__minio_client.stat_object(bucket, obj)
       size += result.size
@@ -69,12 +80,16 @@ class MinioStore(object_storage_manager.ObjectStore):
     if "THREADS" in os.environ:
       try:
         threads = int(os.environ["THREADS"])
+        self.logger.debug("Using %d threads for storage calculation", threads)
       except ValueError:
+        self.logger.exception("THREADS env variable not a number, using a single thread")
         threads = 1
     else:
+      self.logger.debug("Using a single thread for storage calculation")
       threads = 1
 
     sizes = []
+    # must use ThreadPool since minio client is thread safe with threading only
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
       sizes = executor.map(lambda x: self.get_bucket_info(x).size, buckets)
     total_size = sum(sizes)
@@ -99,9 +114,11 @@ class MinioStore(object_storage_manager.ObjectStore):
     """
     try:
       resp = self.__minio_client.fget_object(bucket, object_name, path)
+    except Exception:  # pylint: disable=broad-except
+      self.logger.exception("Got an exception while getting object")
     finally:
-      resp.close()
-      resp.release_conn()
+      resp.close()  # pylint: disable=no-member
+      resp.release_conn() # pylint: disable=no-member
 
   def upload_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
     """
@@ -113,34 +130,43 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return: None
     """
     if not os.path.isfile(path):
-      raise IOError(f"Can't upload {path}: not present or not a file")
+      mesg = f"Can't upload {path}: not present or not a file"
+      self.logger.error(mesg)
+      raise IOError(mesg)
     self.__minio_client.fput_object(bucket, object_name, path)
 
-  def cleanup_storage(self, max_size: int) -> int:
+  def cleanup_storage(self, max_size: int) -> (int, typing.List[str]):
     """
     Clean up storage by removing old files until below max_size
     :param max_size: max size to use
-    :return: Final size of storage used
+    :return: Tuple with final size of storage used and list of buckets removed
     """
 
     if "THREADS" in os.environ:
       try:
         threads = int(os.environ["THREADS"])
+        self.logger.debug("Using %d threads for storage cleanup", threads)
       except ValueError:
+        self.logger.exception("THREADS env variable not a number, using a single thread")
         threads = 1
     else:
       threads = 1
 
     buckets = self.__minio_client.list_buckets()
+
+    # must use ThreadPool since minio client is thread safe with threading only
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
       bucket_list = executor.map(self.get_bucket_info, buckets)
-    bucket_list = list(bucket_list)  # want a list and not an Iterator
+    bucket_list = list(bucket_list)  # want a list and not a Generator so that we can sort
     bucket_list.sort(key=lambda x: x.last_modified)
     idx = 0
+    cleaned_buckets = []
     current_size = sum(map(lambda x: x.size, bucket_list))
     while current_size > max_size and idx <= len(bucket_list):
       bucket = bucket_list[idx]
+      self.logger.info("Deleting %s due to storage limits", bucket.name)
       self.delete_bucket(bucket.name)
+      cleaned_buckets.append(bucket.name)
       current_size -= bucket.size
       idx += 1
-    return current_size
+    return (current_size, cleaned_buckets)

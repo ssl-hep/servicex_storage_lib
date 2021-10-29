@@ -1,3 +1,8 @@
+"""
+Definition for abstract Object storage manager class
+"""
+
+
 # Copyright (c) 2019, IRIS-HEP
 # All rights reserved.
 #
@@ -25,53 +30,55 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 import abc
 import pathlib
+import typing
+
 
 class ObjectStore(abc.ABC):
-    @abc.abstractmethod
-    def get_storage_used(self) -> int:
-        """
-        Get storage used by object store
-        :return: total storage used in bytes
-        """
-        pass
+  """
+  Abstract class for object storage managers to use
+  """
+  @abc.abstractmethod
+  def get_storage_used(self) -> int:
+    """
+    Get storage used by object store
+    :return: total storage used in bytes
+    """
 
-    @abc.abstractmethod
-    def upload_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
-        """
-        Save file to object store
-        :param bucket: name of bucket
-        :param object_name: name of object
-        :param path: path to source file
-        :return: None
-        """
-        pass
+  @abc.abstractmethod
+  def upload_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
+    """
+    Save file to object store
+    :param bucket: name of bucket
+    :param object_name: name of object
+    :param path: path to source file
+    :return: None
+    """
 
-    @abc.abstractmethod
-    def cleanup_storage(self, max_size: int) -> None:
-        """
-        Reduce storage used until it's less than max_size
-        :return: None
-        """
-        pass
+  @abc.abstractmethod
+  def cleanup_storage(self, max_size: int) -> (int, typing.List[str]):
+    """
+    Reduce storage used until it's less than max_size
+    :return: Tuple with final storage used and list of buckets removed
+    """
 
-    @abc.abstractmethod
-    def delete_object(self, bucket: str, object_name: str) -> None:
-        """
-        Delete object from store
-        :param bucket: name of bucket
-        :param object_name: name of object
-        :return: None
-        """
-        pass
+  @abc.abstractmethod
+  def delete_object(self, bucket: str, object_name: str) -> None:
+    """
+    Delete object from store
+    :param bucket: name of bucket
+    :param object_name: name of object
+    :return: None
+    """
 
-    @abc.abstractmethod
-    def get_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
-        """
-        Get an object from store
-        :param bucket: name of bucket
-        :param object_name: name of object
-        :param path: path to destination file (must not be present)
-        :return: None
-        """
+  @abc.abstractmethod
+  def get_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
+    """
+    Get an object from store
+    :param bucket: name of bucket
+    :param object_name: name of object
+    :param path: path to destination file (must not be present)
+    :return: None
+    """
