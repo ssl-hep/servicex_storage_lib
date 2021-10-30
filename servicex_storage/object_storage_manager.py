@@ -33,7 +33,7 @@ Definition for abstract Object storage manager class
 
 import abc
 import pathlib
-import typing
+from typing import List
 
 
 class ObjectStore(abc.ABC):
@@ -58,7 +58,7 @@ class ObjectStore(abc.ABC):
     """
 
   @abc.abstractmethod
-  def cleanup_storage(self, max_size: int) -> (int, typing.List[str]):
+  def cleanup_storage(self, max_size: int) -> (int, List[str]):
     """
     Reduce storage used until it's less than max_size
     :return: Tuple with final storage used and list of buckets removed
@@ -74,6 +74,15 @@ class ObjectStore(abc.ABC):
     """
 
   @abc.abstractmethod
+  def delete_objects(self, bucket: str, object_names: List[str]) -> List[bool]:
+    """
+    Delete object from store
+    :param bucket: name of bucket
+    :param object_names: name of object
+    :return: List of booleans indicating whether each corresponding object was deleted
+    """
+
+  @abc.abstractmethod
   def get_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
     """
     Get an object from store
@@ -81,4 +90,35 @@ class ObjectStore(abc.ABC):
     :param object_name: name of object
     :param path: path to destination file (must not be present)
     :return: None
+    """
+
+  @abc.abstractmethod
+  def get_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
+    """
+    Get an object from store
+    :param bucket: name of bucket
+    :param object_name: name of object
+    :param path: path to destination file (must not be present)
+    :return: None
+    """
+
+  @abc.abstractmethod
+  def get_buckets(self) -> List[str]:
+    """
+    Get an list of buckets from store
+    :return: List of buckets
+    """
+
+  @abc.abstractmethod
+  def create_bucket(self, bucket: str) -> bool:
+    """
+    Create a bucket with given id
+    :return: True on success, False otherwise
+    """
+
+  @abc.abstractmethod
+  def delete_bucket(self, bucket: str) -> bool:
+    """
+    Get delete bucket from store
+    :return: True on success, False otherwise
     """

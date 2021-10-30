@@ -8,9 +8,11 @@ import os
 import pathlib
 import concurrent.futures
 import typing
+from typing import List
 from collections import namedtuple
 
 import minio
+from minio.deleteobjects import DeleteObject
 
 from servicex_storage import object_storage_manager
 
@@ -21,6 +23,7 @@ class MinioStore(object_storage_manager.ObjectStore):
   """
   Class to handle operations for minio storage
   """
+
   def __init__(self, minio_url: str, access_key: str, secret_key: str):
     super().__init__()
 
@@ -54,7 +57,7 @@ class MinioStore(object_storage_manager.ObjectStore):
         last_modified = result.last_modified
     return BucketInfo(name=bucket, size=size, last_modified=last_modified)
 
-  def delete_bucket(self, bucket: str) -> None:
+  def delete_bucket(self, bucket: str) -> bool:
     """
     Delete a given bucket and contents from minio
 
@@ -62,10 +65,13 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return:  None
     """
     if not self.__minio_client.bucket_exists(bucket):
-      return
+      return True
     objects = self.__minio_client.list_objects(bucket)
-    self.__minio_client.remove_objects(bucket, objects)
+    errors = self.__minio_client.remove_objects(bucket, objects)
+    if len(errors) != 0:
+      return False
     self.__minio_client.remove_bucket(bucket)
+    return True
 
   def get_storage_used(self) -> int:
     """
@@ -104,6 +110,17 @@ class MinioStore(object_storage_manager.ObjectStore):
     """
     self.__minio_client.remove_object(bucket, object_name)
 
+  def delete_objects(self, bucket: str, object_names: List[str]) -> List[(str, str)]:
+    """
+    Delete object from store
+    :param bucket: name of bucket
+    :param object_names: name of object
+    :return: List of tuples (objectName, error_message)
+    """
+    delete_objects = map(lambda x: DeleteObject(x), object_names)
+    delete_results = self.__minio_client.remove_objects(bucket, delete_objects)
+    return [(x.name, x.message) for x in delete_results]
+
   def get_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
     """
     Get object from minio and save to given path
@@ -118,14 +135,14 @@ class MinioStore(object_storage_manager.ObjectStore):
       self.logger.exception("Got an exception while getting object")
     finally:
       resp.close()  # pylint: disable=no-member
-      resp.release_conn() # pylint: disable=no-member
+      resp.release_conn()  # pylint: disable=no-member
 
   def upload_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
     """
     Upload file to minio storage
 
     :param bucket: bucket name
-    :param object_name: destination objecct name
+    :param object_name: destination object name
     :param path: path of file source
     :return: None
     """
@@ -169,4 +186,18 @@ class MinioStore(object_storage_manager.ObjectStore):
       cleaned_buckets.append(bucket.name)
       current_size -= bucket.size
       idx += 1
-    return (current_size, cleaned_buckets)
+    return current_size, cleaned_buckets
+
+  def get_buckets(self) -> List[str]:
+    """
+    Get list of buckets in minio
+    :return: list of bucket names
+    """
+    return [x.name for x in self.__minio_client.list_buckets()]
+
+  def create_bucket(self, bucket: str) -> None:
+    """
+    Create a bucket with given id
+    :return: None
+    """
+    self.__minio_client.make_bucket(bucket)
