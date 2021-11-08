@@ -117,7 +117,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     :param object_names: name of object
     :return: List of tuples (objectName, error_message)
     """
-    delete_objects = map(lambda x: DeleteObject(x), object_names)
+    delete_objects = [DeleteObject(x) for x in object_names]
     delete_results = self.__minio_client.remove_objects(bucket, delete_objects)
     return [(x.name, x.message) for x in delete_results]
 
@@ -152,10 +152,11 @@ class MinioStore(object_storage_manager.ObjectStore):
       raise IOError(mesg)
     self.__minio_client.fput_object(bucket, object_name, path)
 
-  def cleanup_storage(self, max_size: int) -> (int, typing.List[str]):
+  def cleanup_storage(self, max_size: int, max_age: int) -> (int, typing.List[str]):
     """
     Clean up storage by removing old files until below max_size
-    :param max_size: max size to use
+    :param max_size: max amount of storage that can be used before trying to clean up
+    :param max_age: max number of days a bucket can be before it is deleted
     :return: Tuple with final size of storage used and list of buckets removed
     """
 
@@ -171,15 +172,44 @@ class MinioStore(object_storage_manager.ObjectStore):
 
     buckets = self.__minio_client.list_buckets()
 
+    cleaned_buckets = []
     # must use ThreadPool since minio client is thread safe with threading only
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
       bucket_list = executor.map(self.get_bucket_info, buckets)
-    bucket_list = list(bucket_list)  # want a list and not a Generator so that we can sort
+
+    # concurrently delete any old buckets
+    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+      new_buckets = []
+      old_buckets = []
+      for bucket in bucket_list:
+        bucket_age = (datetime.datetime.now() - bucket.last_modified).days
+        if bucket_age > max_age:
+          old_buckets.append((bucket.name, bucket_age))
+        else:
+          new_buckets.append(bucket)
+
+      futures = {executor.submit(lambda x: self.delete_bucket(x), bucket.name):(bucket.name, bucket.age)
+                 for bucket in old_buckets}
+      for future in concurrent.futures.as_completed(futures):
+        bucket_info = futures[future]
+        try:
+          deleted = future.result()
+          # use mesg in both log outputs with different capitalizations of D
+          mesg = f"eleting {bucket_info[0]} due to age: {bucket_info[1]} days"
+          if deleted:
+            self.logger.info("D%s", mesg)
+            cleaned_buckets.append(bucket_info[0])
+          else:
+            self.logger.error("Error d%s", mesg)
+        except Exception:  # pylint: disable=too-broad
+          self.logger.exception("Received exception while deleting %s due to age", bucket_info[0])
+
+      bucket_list = new_buckets
+
     bucket_list.sort(key=lambda x: x.last_modified)
     idx = 0
-    cleaned_buckets = []
     current_size = sum(map(lambda x: x.size, bucket_list))
-    while current_size > max_size and idx <= len(bucket_list):
+    while current_size > max_size and idx < len(bucket_list):
       bucket = bucket_list[idx]
       self.logger.info("Deleting %s due to storage limits", bucket.name)
       self.delete_bucket(bucket.name)

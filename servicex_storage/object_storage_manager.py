@@ -58,9 +58,11 @@ class ObjectStore(abc.ABC):
     """
 
   @abc.abstractmethod
-  def cleanup_storage(self, max_size: int) -> (int, List[str]):
+  def cleanup_storage(self, max_size: str, max_age: int) -> (int, List[str]):
     """
     Reduce storage used until it's less than max_size
+    :param max_size: Maximum amount of storage to use before trying to clean up
+    :param max_age: Maximum number of days a bucket can be before it is cleaned up
     :return: Tuple with final storage used and list of buckets removed
     """
 
@@ -80,16 +82,6 @@ class ObjectStore(abc.ABC):
     :param bucket: name of bucket
     :param object_names: name of object
     :return: List of booleans indicating whether each corresponding object was deleted
-    """
-
-  @abc.abstractmethod
-  def get_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
-    """
-    Get an object from store
-    :param bucket: name of bucket
-    :param object_name: name of object
-    :param path: path to destination file (must not be present)
-    :return: None
     """
 
   @abc.abstractmethod
