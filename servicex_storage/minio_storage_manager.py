@@ -1,5 +1,5 @@
 """
-Implementation of storage manager for s3 based storage
+Implementation of storage manager for minio based storage
 """
 
 import datetime
@@ -39,6 +39,17 @@ class MinioStore(object_storage_manager.ObjectStore):
     self.__minio_client = minio.Minio(self.minio_url,
                                       access_key=self.access_key,
                                       secret_key=self.secret_key)
+
+    # set up threads to use
+    if "THREADS" in os.environ:
+      try:
+        self.__threads = int(os.environ["THREADS"])
+        self.logger.debug("Using %d threads for storage cleanup", self.__threads)
+      except ValueError:
+        self.logger.exception("THREADS env variable not a number, using a single thread")
+        self.__threads = 1
+    else:
+      self.__threads = 1
 
   def get_bucket_info(self, bucket: str) -> BucketInfo:
     """
@@ -84,19 +95,8 @@ class MinioStore(object_storage_manager.ObjectStore):
     if len(buckets) == 0:
       return 0
 
-    if "THREADS" in os.environ:
-      try:
-        threads = int(os.environ["THREADS"])
-        self.logger.debug("Using %d threads for storage calculation", threads)
-      except ValueError:
-        self.logger.exception("THREADS env variable not a number, using a single thread")
-        threads = 1
-    else:
-      self.logger.debug("Using a single thread for storage calculation")
-      threads = 1
-
     # must use ThreadPool since minio client is thread safe with threading only
-    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=self.__threads) as executor:
       sizes = executor.map(lambda x: self.get_bucket_info(x).size, buckets)
     total_size = sum(sizes)
     return total_size
@@ -160,25 +160,15 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return: Tuple with final size of storage used and list of buckets removed
     """
 
-    if "THREADS" in os.environ:
-      try:
-        threads = int(os.environ["THREADS"])
-        self.logger.debug("Using %d threads for storage cleanup", threads)
-      except ValueError:
-        self.logger.exception("THREADS env variable not a number, using a single thread")
-        threads = 1
-    else:
-      threads = 1
-
     buckets = self.__minio_client.list_buckets()
 
     cleaned_buckets = []
     # must use ThreadPool since minio client is thread safe with threading only
-    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=self.__threads) as executor:
       bucket_list = executor.map(self.get_bucket_info, buckets)
 
     # concurrently delete any old buckets
-    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=self.__threads) as executor:
       kept_buckets = []
       old_buckets = []
       for bucket in bucket_list:
@@ -201,7 +191,7 @@ class MinioStore(object_storage_manager.ObjectStore):
             cleaned_buckets.append(bucket_info[0])
           else:
             self.logger.error("Error d%s", mesg)
-        except Exception:  # pylint: disable=too-broad
+        except Exception:  # pylint: disable=broad-except
           self.logger.exception("Received exception while deleting %s due to age", bucket_info[0])
 
     kept_buckets.sort(key=lambda x: x.last_modified)
