@@ -1,5 +1,5 @@
 """
-Implementation of storage manager for minio based storage
+Implementation of storage manager for s3 based storage
 """
 
 import datetime
@@ -9,6 +9,7 @@ import pathlib
 import concurrent.futures
 import typing
 from typing import List
+from typing import Tuple
 from collections import namedtuple
 
 import minio
@@ -94,7 +95,6 @@ class MinioStore(object_storage_manager.ObjectStore):
       self.logger.debug("Using a single thread for storage calculation")
       threads = 1
 
-    sizes = []
     # must use ThreadPool since minio client is thread safe with threading only
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
       sizes = executor.map(lambda x: self.get_bucket_info(x).size, buckets)
@@ -110,7 +110,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     """
     self.__minio_client.remove_object(bucket, object_name)
 
-  def delete_objects(self, bucket: str, object_names: List[str]) -> List[(str, str)]:
+  def delete_objects(self, bucket: str, object_names: List[str]) -> List[Tuple[str, str]]:
     """
     Delete object from store
     :param bucket: name of bucket
@@ -152,7 +152,7 @@ class MinioStore(object_storage_manager.ObjectStore):
       raise IOError(mesg)
     self.__minio_client.fput_object(bucket, object_name, path)
 
-  def cleanup_storage(self, max_size: int, max_age: int) -> (int, typing.List[str]):
+  def cleanup_storage(self, max_size: int, max_age: int) -> Tuple[int, List[str]]:
     """
     Clean up storage by removing old files until below max_size
     :param max_size: max amount of storage that can be used before trying to clean up
@@ -179,16 +179,16 @@ class MinioStore(object_storage_manager.ObjectStore):
 
     # concurrently delete any old buckets
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
-      new_buckets = []
+      kept_buckets = []
       old_buckets = []
       for bucket in bucket_list:
         bucket_age = (datetime.datetime.now() - bucket.last_modified).days
         if bucket_age > max_age:
           old_buckets.append((bucket.name, bucket_age))
         else:
-          new_buckets.append(bucket)
+          kept_buckets.append(bucket)
 
-      futures = {executor.submit(lambda x: self.delete_bucket(x), bucket.name):(bucket.name, bucket.age)
+      futures = {executor.submit(lambda x: self.delete_bucket(x), bucket[0]): (bucket[0], bucket[1])
                  for bucket in old_buckets}
       for future in concurrent.futures.as_completed(futures):
         bucket_info = futures[future]
@@ -204,13 +204,11 @@ class MinioStore(object_storage_manager.ObjectStore):
         except Exception:  # pylint: disable=too-broad
           self.logger.exception("Received exception while deleting %s due to age", bucket_info[0])
 
-      bucket_list = new_buckets
-
-    bucket_list.sort(key=lambda x: x.last_modified)
+    kept_buckets.sort(key=lambda x: x.last_modified)
     idx = 0
-    current_size = sum(map(lambda x: x.size, bucket_list))
-    while current_size > max_size and idx < len(bucket_list):
-      bucket = bucket_list[idx]
+    current_size = sum(map(lambda x: x.size, kept_buckets))
+    while current_size > max_size and idx < len(kept_buckets):
+      bucket = kept_buckets[idx]
       self.logger.info("Deleting %s due to storage limits", bucket.name)
       self.delete_bucket(bucket.name)
       cleaned_buckets.append(bucket.name)
@@ -225,9 +223,14 @@ class MinioStore(object_storage_manager.ObjectStore):
     """
     return [x.name for x in self.__minio_client.list_buckets()]
 
-  def create_bucket(self, bucket: str) -> None:
+  def create_bucket(self, bucket: str) -> bool:
     """
     Create a bucket with given id
     :return: None
     """
-    self.__minio_client.make_bucket(bucket)
+    try:
+      self.__minio_client.make_bucket(bucket)
+      return True
+    except:
+      return False
+

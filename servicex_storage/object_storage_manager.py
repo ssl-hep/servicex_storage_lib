@@ -34,6 +34,7 @@ Definition for abstract Object storage manager class
 import abc
 import pathlib
 from typing import List
+from typing import Tuple
 
 
 class ObjectStore(abc.ABC):
@@ -58,7 +59,7 @@ class ObjectStore(abc.ABC):
     """
 
   @abc.abstractmethod
-  def cleanup_storage(self, max_size: str, max_age: int) -> (int, List[str]):
+  def cleanup_storage(self, max_size: int, max_age: int) -> Tuple[int, List[str]]:
     """
     Reduce storage used until it's less than max_size
     :param max_size: Maximum amount of storage to use before trying to clean up
@@ -76,7 +77,7 @@ class ObjectStore(abc.ABC):
     """
 
   @abc.abstractmethod
-  def delete_objects(self, bucket: str, object_names: List[str]) -> List[bool]:
+  def delete_objects(self, bucket: str, object_names: List[str]) -> List[Tuple[str, str]]:
     """
     Delete object from store
     :param bucket: name of bucket
