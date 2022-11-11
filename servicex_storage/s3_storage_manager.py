@@ -20,23 +20,23 @@ from servicex_storage import object_storage_manager
 BucketInfo = namedtuple('BucketInfo', ['name', 'size', 'last_modified'])
 
 
-class MinioStore(object_storage_manager.ObjectStore):
+class S3Store(object_storage_manager.ObjectStore):
   """
   Class to handle operations for minio storage
   """
 
-  def __init__(self, s3_url: str, access_key: str, secret_key: str):
+  def __init__(self, s3_endpoint: str, access_key: str, secret_key: str):
     super().__init__()
 
     self.logger = logging.getLogger(__name__)
     self.logger.addHandler(logging.NullHandler())
 
-    self.s3_url = s3_url
+    self.s3_endpoint = s3_endpoint
     self.access_key = access_key
     self.secret_key = secret_key
 
     # s3 client is thread safe using Threading, not so much with multiprocessing
-    self.__s3_client = minio.Minio(self.s3_url,
+    self.__s3_client = minio.Minio(self.s3_endpoint,
                                    access_key=self.access_key,
                                    secret_key=self.secret_key)
 
@@ -211,7 +211,7 @@ class MinioStore(object_storage_manager.ObjectStore):
 
   def get_buckets(self) -> List[str]:
     """
-    Get list of buckets in minio
+    Get list of buckets in s3
     :return: list of bucket names
     """
     return [x.name for x in self.__s3_client.list_buckets()]

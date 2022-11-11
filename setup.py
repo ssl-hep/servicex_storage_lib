@@ -29,7 +29,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='servicex_storage',
-    version='0.2',
+    version='0.3',
     url='https://iris-hep.org',
     license='BSD',
     maintainer='ServiceX Team',

@@ -43,9 +43,9 @@ class MyTestCase(unittest.TestCase):
                                                                     year=2021, month=10,
                                                                     day=1, hour=10,
                                                                     minute=10, second=10))
-    test_obj = servicex_storage.s3_storage_manager.MinioStore(s3_url="abc",
-                                                              access_key="abc",
-                                                              secret_key="abc")
+    test_obj = servicex_storage.s3_storage_manager.S3Store(s3_endpoint="abc",
+                                                           access_key="abc",
+                                                           secret_key="abc")
     bucket_info = test_obj.get_bucket_info("bucket1")
     self.assertEqual(bucket_info, return_value)
 
@@ -61,9 +61,9 @@ class MyTestCase(unittest.TestCase):
     mock_class().stat_object.side_effect = list(s3_fake_objects["bucket1"].values()) + \
                                            list(s3_fake_objects["bucket2"].values())
 
-    test_obj = servicex_storage.s3_storage_manager.MinioStore(s3_url="abc",
-                                                              access_key="abc",
-                                                              secret_key="abc")
+    test_obj = servicex_storage.s3_storage_manager.S3Store(s3_endpoint="abc",
+                                                           access_key="abc",
+                                                           secret_key="abc")
 
     bucket_size = test_obj.get_storage_used()
     self.assertEqual(bucket_size, 660)
@@ -103,9 +103,9 @@ class MyTestCase(unittest.TestCase):
     mock_class().stat_object.side_effect = list(current_s3_fake_objects["bucket1"].values()) + \
                                            list(current_s3_fake_objects["bucket2"].values())
 
-    test_obj = servicex_storage.s3_storage_manager.MinioStore(s3_url="abc",
-                                                              access_key="abc",
-                                                              secret_key="abc")
+    test_obj = servicex_storage.s3_storage_manager.S3Store(s3_endpoint="abc",
+                                                           access_key="abc",
+                                                           secret_key="abc")
 
     final_size = test_obj.cleanup_storage(70, 60, 365)[0]
     self.assertEqual(final_size, 60)
