@@ -74,18 +74,40 @@ class MyTestCase(unittest.TestCase):
     Test minio's get bucket info
     :return: None
     """
-    mock_class().list_buckets.return_value = list(minio_fake_objects.keys())
-    mock_class().list_objects.side_effect = [list(minio_fake_objects["bucket1"].keys()),
-                                             list(minio_fake_objects["bucket2"].keys()),
-                                             list(minio_fake_objects["bucket2"].keys())]
-    mock_class().stat_object.side_effect = list(minio_fake_objects["bucket1"].values()) + \
-                                           list(minio_fake_objects["bucket2"].values())
+    current_minio_fake_objects = {
+      "bucket1": {
+        "object1": ObjectInfo(size=10,
+                              last_modified=datetime.datetime.utcnow()),
+        "object2": ObjectInfo(size=20,
+                              last_modified=datetime.datetime.utcnow()),
+        "object3": ObjectInfo(size=30,
+                              last_modified=datetime.datetime.utcnow()),
+      },
+      "bucket2": {
+        "object4": ObjectInfo(size=100,
+                              last_modified=datetime.datetime(year=2020, month=10, day=1, hour=10, minute=10,
+                                                              second=10)),
+        "object5": ObjectInfo(size=200,
+                              last_modified=datetime.datetime(year=2020, month=10, day=1, hour=10, minute=11,
+                                                              second=10)),
+        "object6": ObjectInfo(size=300,
+                              last_modified=datetime.datetime(year=2020, month=10, day=1, hour=10, minute=12,
+                                                              second=10)),
+      }
+    }
+
+    mock_class().list_buckets.return_value = list(current_minio_fake_objects.keys())
+    mock_class().list_objects.side_effect = [list(current_minio_fake_objects["bucket1"].keys()),
+                                             list(current_minio_fake_objects["bucket2"].keys()),
+                                             list(current_minio_fake_objects["bucket2"].keys())]
+    mock_class().stat_object.side_effect = list(current_minio_fake_objects["bucket1"].values()) + \
+                                           list(current_minio_fake_objects["bucket2"].values())
 
     test_obj = servicex_storage.minio_storage_manager.MinioStore(minio_url="abc",
                                                                  access_key="abc",
                                                                  secret_key="abc")
 
-    final_size = test_obj.cleanup_storage(70)
+    final_size = test_obj.cleanup_storage(70, 60, 365)[0]
     self.assertEqual(final_size, 60)
     mock_class().remove_objects.assert_called_with("bucket2", ["object4", "object5", "object6"])
 

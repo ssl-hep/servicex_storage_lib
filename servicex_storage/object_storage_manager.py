@@ -59,10 +59,11 @@ class ObjectStore(abc.ABC):
     """
 
   @abc.abstractmethod
-  def cleanup_storage(self, max_size: int, max_age: int) -> Tuple[int, List[str]]:
+  def cleanup_storage(self, max_size: int, norm_size: int, max_age: int) -> Tuple[int, List[str]]:
     """
     Reduce storage used until it's less than max_size
     :param max_size: Maximum amount of storage to use before trying to clean up
+    :param norm_size: when this size is achieved, stop removing files
     :param max_age: Maximum number of days a bucket can be before it is cleaned up
     :return: Tuple with final storage used and list of buckets removed
     """

@@ -152,10 +152,11 @@ class MinioStore(object_storage_manager.ObjectStore):
       raise IOError(mesg)
     self.__minio_client.fput_object(bucket, object_name, path)
 
-  def cleanup_storage(self, max_size: int, max_age: int) -> Tuple[int, List[str]]:
+  def cleanup_storage(self, max_size: int, norm_size: int, max_age: int) -> Tuple[int, List[str]]:
     """
     Clean up storage by removing old files until below max_size
     :param max_size: max amount of storage that can be used before trying to clean up
+    :param norm_size: when this size is achieved, stop removing files
     :param max_age: max number of days a bucket can be before it is deleted
     :return: Tuple with final size of storage used and list of buckets removed
     """
@@ -178,6 +179,7 @@ class MinioStore(object_storage_manager.ObjectStore):
         else:
           kept_buckets.append(bucket)
 
+      print(old_buckets)
       futures = {executor.submit(lambda x: self.delete_bucket(x), bucket[0]): (bucket[0], bucket[1])
                  for bucket in old_buckets}
       for future in concurrent.futures.as_completed(futures):
@@ -197,13 +199,14 @@ class MinioStore(object_storage_manager.ObjectStore):
     kept_buckets.sort(key=lambda x: x.last_modified)
     idx = 0
     current_size = sum(map(lambda x: x.size, kept_buckets))
-    while current_size > max_size and idx < len(kept_buckets):
-      bucket = kept_buckets[idx]
-      self.logger.info("Deleting %s due to storage limits", bucket.name)
-      self.delete_bucket(bucket.name)
-      cleaned_buckets.append(bucket.name)
-      current_size -= bucket.size
-      idx += 1
+    if current_size > max_size:
+      while current_size > norm_size and idx < len(kept_buckets):
+        bucket = kept_buckets[idx]
+        self.logger.info("Deleting %s due to storage limits", bucket.name)
+        self.delete_bucket(bucket.name)
+        cleaned_buckets.append(bucket.name)
+        current_size -= bucket.size
+        idx += 1
     return current_size, cleaned_buckets
 
   def get_buckets(self) -> List[str]:
