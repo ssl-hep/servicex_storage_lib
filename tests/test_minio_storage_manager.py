@@ -4,10 +4,10 @@ from collections import namedtuple
 
 from unittest.mock import patch
 
-import servicex_storage.minio_storage_manager
+import servicex_storage.s3_storage_manager
 
 ObjectInfo = namedtuple('ObjectInfo', ['size', 'last_modified'])
-minio_fake_objects = {
+s3_fake_objects = {
   "bucket1": {
     "object1": ObjectInfo(size=10,
                           last_modified=datetime.datetime(year=2021, month=10, day=1, hour=10, minute=10, second=10)),
@@ -29,52 +29,52 @@ minio_fake_objects = {
 
 class MyTestCase(unittest.TestCase):
   @patch('minio.Minio')
-  def test_minio_get_bucket_info(self, mock_class):
+  def test_s3_get_bucket_info(self, mock_class):
     """
-    Test minio's get bucket info
+    Test s3's get bucket info
     :return: None
     """
 
-    mock_class().list_objects.return_value = list(minio_fake_objects["bucket1"].keys())
-    mock_class().stat_object.side_effect = list(minio_fake_objects["bucket1"].values())
-    return_value = servicex_storage.minio_storage_manager.BucketInfo(name="bucket1",
-                                                                     size=60,
-                                                                     last_modified=datetime.datetime(
-                                                                       year=2021, month=10,
-                                                                       day=1, hour=10,
-                                                                       minute=10, second=10))
-    test_obj = servicex_storage.minio_storage_manager.MinioStore(minio_url="abc",
-                                                                 access_key="abc",
-                                                                 secret_key="abc")
+    mock_class().list_objects.return_value = list(s3_fake_objects["bucket1"].keys())
+    mock_class().stat_object.side_effect = list(s3_fake_objects["bucket1"].values())
+    return_value = servicex_storage.s3_storage_manager.BucketInfo(name="bucket1",
+                                                                  size=60,
+                                                                  last_modified=datetime.datetime(
+                                                                    year=2021, month=10,
+                                                                    day=1, hour=10,
+                                                                    minute=10, second=10))
+    test_obj = servicex_storage.s3_storage_manager.MinioStore(s3_url="abc",
+                                                              access_key="abc",
+                                                              secret_key="abc")
     bucket_info = test_obj.get_bucket_info("bucket1")
     self.assertEqual(bucket_info, return_value)
 
   @patch('minio.Minio')
   def test_minio_get_storage_used(self, mock_class):
     """
-    Test minio's get bucket info
+    Test getting storage used by a s3 bucket
     :return: None
     """
-    mock_class().list_buckets.return_value = list(minio_fake_objects.keys())
-    mock_class().list_objects.side_effect = [list(minio_fake_objects["bucket1"].keys()),
-                                             list(minio_fake_objects["bucket2"].keys())]
-    mock_class().stat_object.side_effect = list(minio_fake_objects["bucket1"].values()) + \
-                                           list(minio_fake_objects["bucket2"].values())
+    mock_class().list_buckets.return_value = list(s3_fake_objects.keys())
+    mock_class().list_objects.side_effect = [list(s3_fake_objects["bucket1"].keys()),
+                                             list(s3_fake_objects["bucket2"].keys())]
+    mock_class().stat_object.side_effect = list(s3_fake_objects["bucket1"].values()) + \
+                                           list(s3_fake_objects["bucket2"].values())
 
-    test_obj = servicex_storage.minio_storage_manager.MinioStore(minio_url="abc",
-                                                                 access_key="abc",
-                                                                 secret_key="abc")
+    test_obj = servicex_storage.s3_storage_manager.MinioStore(s3_url="abc",
+                                                              access_key="abc",
+                                                              secret_key="abc")
 
     bucket_size = test_obj.get_storage_used()
     self.assertEqual(bucket_size, 660)
 
   @patch('minio.Minio')
-  def test_minio_cleanup_storage(self, mock_class):
+  def test_s3_cleanup_storage(self, mock_class):
     """
     Test minio's get bucket info
     :return: None
     """
-    current_minio_fake_objects = {
+    current_s3_fake_objects = {
       "bucket1": {
         "object1": ObjectInfo(size=10,
                               last_modified=datetime.datetime.utcnow()),
@@ -96,16 +96,16 @@ class MyTestCase(unittest.TestCase):
       }
     }
 
-    mock_class().list_buckets.return_value = list(current_minio_fake_objects.keys())
-    mock_class().list_objects.side_effect = [list(current_minio_fake_objects["bucket1"].keys()),
-                                             list(current_minio_fake_objects["bucket2"].keys()),
-                                             list(current_minio_fake_objects["bucket2"].keys())]
-    mock_class().stat_object.side_effect = list(current_minio_fake_objects["bucket1"].values()) + \
-                                           list(current_minio_fake_objects["bucket2"].values())
+    mock_class().list_buckets.return_value = list(current_s3_fake_objects.keys())
+    mock_class().list_objects.side_effect = [list(current_s3_fake_objects["bucket1"].keys()),
+                                             list(current_s3_fake_objects["bucket2"].keys()),
+                                             list(current_s3_fake_objects["bucket2"].keys())]
+    mock_class().stat_object.side_effect = list(current_s3_fake_objects["bucket1"].values()) + \
+                                           list(current_s3_fake_objects["bucket2"].values())
 
-    test_obj = servicex_storage.minio_storage_manager.MinioStore(minio_url="abc",
-                                                                 access_key="abc",
-                                                                 secret_key="abc")
+    test_obj = servicex_storage.s3_storage_manager.MinioStore(s3_url="abc",
+                                                              access_key="abc",
+                                                              secret_key="abc")
 
     final_size = test_obj.cleanup_storage(70, 60, 365)[0]
     self.assertEqual(final_size, 60)

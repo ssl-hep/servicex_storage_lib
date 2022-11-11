@@ -25,20 +25,20 @@ class MinioStore(object_storage_manager.ObjectStore):
   Class to handle operations for minio storage
   """
 
-  def __init__(self, minio_url: str, access_key: str, secret_key: str):
+  def __init__(self, s3_url: str, access_key: str, secret_key: str):
     super().__init__()
 
     self.logger = logging.getLogger(__name__)
     self.logger.addHandler(logging.NullHandler())
 
-    self.minio_url = minio_url
+    self.s3_url = s3_url
     self.access_key = access_key
     self.secret_key = secret_key
 
-    # minio client is thread safe using Threading, not so much with multiprocessing
-    self.__minio_client = minio.Minio(self.minio_url,
-                                      access_key=self.access_key,
-                                      secret_key=self.secret_key)
+    # s3 client is thread safe using Threading, not so much with multiprocessing
+    self.__s3_client = minio.Minio(self.s3_url,
+                                   access_key=self.access_key,
+                                   secret_key=self.secret_key)
 
     # set up threads to use
     if "THREADS" in os.environ:
@@ -59,11 +59,11 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return: None
     """
 
-    objects = self.__minio_client.list_objects(bucket)
+    objects = self.__s3_client.list_objects(bucket)
     size = 0
     last_modified = datetime.datetime.now()
     for obj in objects:
-      result = self.__minio_client.stat_object(bucket, obj)
+      result = self.__s3_client.stat_object(bucket, obj)
       size += result.size
       if result.last_modified < last_modified:
         last_modified = result.last_modified
@@ -76,13 +76,13 @@ class MinioStore(object_storage_manager.ObjectStore):
     :param bucket: bucket name
     :return:  None
     """
-    if not self.__minio_client.bucket_exists(bucket):
+    if not self.__s3_client.bucket_exists(bucket):
       return True
-    objects = self.__minio_client.list_objects(bucket)
-    errors = self.__minio_client.remove_objects(bucket, objects)
+    objects = self.__s3_client.list_objects(bucket)
+    errors = self.__s3_client.remove_objects(bucket, objects)
     if len(errors) != 0:
       return False
-    self.__minio_client.remove_bucket(bucket)
+    self.__s3_client.remove_bucket(bucket)
     return True
 
   def get_storage_used(self) -> int:
@@ -91,7 +91,7 @@ class MinioStore(object_storage_manager.ObjectStore):
 
     :return: integer with number of bytes used
     """
-    buckets = self.__minio_client.list_buckets()
+    buckets = self.__s3_client.list_buckets()
     if len(buckets) == 0:
       return 0
 
@@ -108,7 +108,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     :param object_name:  name of object
     :return: None
     """
-    self.__minio_client.remove_object(bucket, object_name)
+    self.__s3_client.remove_object(bucket, object_name)
 
   def delete_objects(self, bucket: str, object_names: List[str]) -> List[Tuple[str, str]]:
     """
@@ -118,7 +118,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return: List of tuples (objectName, error_message)
     """
     delete_objects = [DeleteObject(x) for x in object_names]
-    delete_results = self.__minio_client.remove_objects(bucket, delete_objects)
+    delete_results = self.__s3_client.remove_objects(bucket, delete_objects)
     return [(x.name, x.message) for x in delete_results]
 
   def get_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
@@ -130,7 +130,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return: None
     """
     try:
-      resp = self.__minio_client.fget_object(bucket, object_name, path)
+      resp = self.__s3_client.fget_object(bucket, object_name, path)
     except Exception:  # pylint: disable=broad-except
       self.logger.exception("Got an exception while getting object")
     finally:
@@ -161,7 +161,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return: Tuple with final size of storage used and list of buckets removed
     """
 
-    buckets = self.__minio_client.list_buckets()
+    buckets = self.__s3_client.list_buckets()
 
     cleaned_buckets = []
     # must use ThreadPool since minio client is thread safe with threading only
@@ -214,7 +214,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     Get list of buckets in minio
     :return: list of bucket names
     """
-    return [x.name for x in self.__minio_client.list_buckets()]
+    return [x.name for x in self.__s3_client.list_buckets()]
 
   def create_bucket(self, bucket: str) -> bool:
     """
@@ -222,7 +222,7 @@ class MinioStore(object_storage_manager.ObjectStore):
     :return: None
     """
     try:
-      self.__minio_client.make_bucket(bucket)
+      self.__s3_client.make_bucket(bucket)
       return True
     except:
       return False
