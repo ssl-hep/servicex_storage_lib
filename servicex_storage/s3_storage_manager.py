@@ -25,7 +25,7 @@ class S3Store(object_storage_manager.ObjectStore):
   Class to handle operations for minio storage
   """
 
-  def __init__(self, s3_endpoint: str, access_key: str, secret_key: str):
+  def __init__(self, s3_endpoint: str, access_key: str, secret_key: str, use_https: bool = False):
     super().__init__()
 
     self.logger = logging.getLogger(__name__)
@@ -38,7 +38,8 @@ class S3Store(object_storage_manager.ObjectStore):
     # s3 client is thread safe using Threading, not so much with multiprocessing
     self.__s3_client = minio.Minio(self.s3_endpoint,
                                    access_key=self.access_key,
-                                   secret_key=self.secret_key)
+                                   secret_key=self.secret_key,
+                                   secure=use_https)
 
     # set up threads to use
     if "THREADS" in os.environ:
@@ -150,7 +151,7 @@ class S3Store(object_storage_manager.ObjectStore):
       mesg = f"Can't upload {path}: not present or not a file"
       self.logger.error(mesg)
       raise IOError(mesg)
-    self.__minio_client.fput_object(bucket, object_name, path)
+    self.__s3_client.fput_object(bucket, object_name, path)
 
   def cleanup_storage(self, max_size: int, norm_size: int, max_age: int) -> Tuple[int, List[str]]:
     """
