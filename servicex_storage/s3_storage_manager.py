@@ -55,16 +55,15 @@ class S3Store(object_storage_manager.ObjectStore):
   def get_bucket_info(self, bucket: str) -> BucketInfo:
     """
     Given a bucket, get the size and last modified date
-
     :param bucket: bucket name
     :return: None
     """
 
     objects = self.__s3_client.list_objects(bucket)
     size = 0
-    last_modified = datetime.datetime.now()
+    last_modified = datetime.datetime.now(datetime.timezone.utc)
     for obj in objects:
-      result = self.__s3_client.stat_object(bucket, obj)
+      result = self.__s3_client.stat_object(obj.bucket_name, obj.object_name)
       size += result.size
       if result.last_modified < last_modified:
         last_modified = result.last_modified
@@ -73,15 +72,16 @@ class S3Store(object_storage_manager.ObjectStore):
   def delete_bucket(self, bucket: str) -> bool:
     """
     Delete a given bucket and contents from minio
-
     :param bucket: bucket name
     :return:  None
     """
     if not self.__s3_client.bucket_exists(bucket):
       return True
-    objects = self.__s3_client.list_objects(bucket)
-    errors = self.__s3_client.remove_objects(bucket, objects)
-    if len(errors) != 0:
+    delete_objects = map(lambda x: DeleteObject(x.object_name), self.__s3_client.list_objects(bucket))
+    errors = 0
+    for error in self.__s3_client.remove_objects(bucket, delete_objects):
+      errors += 1
+    if errors != 0:
       return False
     self.__s3_client.remove_bucket(bucket)
     return True
@@ -141,7 +141,6 @@ class S3Store(object_storage_manager.ObjectStore):
   def upload_file(self, bucket: str, object_name: str, path: pathlib.Path) -> None:
     """
     Upload file to minio storage
-
     :param bucket: bucket name
     :param object_name: destination object name
     :param path: path of file source
@@ -161,9 +160,7 @@ class S3Store(object_storage_manager.ObjectStore):
     :param max_age: max number of days a bucket can be before it is deleted
     :return: Tuple with final size of storage used and list of buckets removed
     """
-
-    buckets = self.__s3_client.list_buckets()
-
+    buckets = map(lambda x: x.name, self.__s3_client.list_buckets())
     cleaned_buckets = []
     # must use ThreadPool since minio client is thread safe with threading only
     with concurrent.futures.ThreadPoolExecutor(max_workers=self.__threads) as executor:
@@ -174,13 +171,12 @@ class S3Store(object_storage_manager.ObjectStore):
       kept_buckets = []
       old_buckets = []
       for bucket in bucket_list:
-        bucket_age = (datetime.datetime.now() - bucket.last_modified).days
+        bucket_age = (datetime.datetime.now(datetime.timezone.utc) - bucket.last_modified).days
         if bucket_age > max_age:
           old_buckets.append((bucket.name, bucket_age))
         else:
           kept_buckets.append(bucket)
 
-      print(old_buckets)
       futures = {executor.submit(lambda x: self.delete_bucket(x), bucket[0]): (bucket[0], bucket[1])
                  for bucket in old_buckets}
       for future in concurrent.futures.as_completed(futures):
